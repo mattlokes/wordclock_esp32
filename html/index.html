@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wordclock</title>
+</head>
+<script language="javascript" type="text/javascript">
+
+var url = 'ws://' + location.host + '/ws';
+
+var stat_tz;
+var stat_time;
+var stat_ssid;
+var stat_conn;
+
+var tz_opts;
+var tz_update;
+
+var wifi_ssids;
+var wifi_pass;
+var wifi_update;
+var wifi_scan;
+
+// This is called when the page finishes loading
+function init() {
+
+    // Assign page elements to variables
+    stat_tz     = document.getElementById("stat_tz"); 
+    stat_time   = document.getElementById("stat_time");
+    stat_ssid   = document.getElementById("stat_ssid");
+    stat_conn   = document.getElementById("stat_conn");
+
+    tz_opts     = document.getElementById("tz_opts");  
+    tz_update   = document.getElementById("tz_update"); 
+                                           
+    wifi_ssids  = document.getElementById("wifi_ssids");
+    wifi_pass   = document.getElementById("wifi_pass");  
+    wifi_update = document.getElementById("wifi_update");
+    wifi_scan   = document.getElementById("wifi_scan");
+
+    // Connect to WebSocket server
+    wsConnect(url);
+}
+
+// Call this to connect to the WebSocket server
+function wsConnect(url) {
+    
+    // Connect to WebSocket server
+    websocket = new WebSocket(url);
+    
+    // Assign callbacks
+    websocket.onopen = function(evt) { onOpen(evt) };
+    websocket.onclose = function(evt) { onClose(evt) };
+    websocket.onmessage = function(evt) { onMessage(evt) };
+    websocket.onerror = function(evt) { onError(evt) };
+}
+
+// Called when a WebSocket connection is established with the server
+function onOpen(evt) {
+
+    // Log connection state
+    console.log("Connected");
+    
+    // Get available ssids
+    doScan();
+}
+
+// Called when the WebSocket connection is closed
+function onClose(evt) {
+
+    // Log disconnection state
+    console.log("Disconnected");
+    
+    // Try to reconnect after a few seconds
+    setTimeout(function() { wsConnect(url) }, 2000);
+}
+
+// Called when a message is received from the server
+function onMessage(evt) {
+
+    // Print out our received message
+    //console.log("Received: " + evt.data);
+    
+    obj = JSON.parse(evt.data);
+    switch(obj.type) {
+        case "stat":
+            stat_tz.innerHTML = obj.payld.tz;
+            stat_time.innerHTML = obj.payld.time;
+            stat_ssid.innerHTML = obj.payld.ssid;
+            stat_conn.innerHTML = obj.payld.conn;
+            break;
+        case "scan":
+            while (wifi_ssids.options.length > 0) {
+              wifi_ssids.remove(0);
+            }
+            for ( idx in obj.payld ) {
+              ssid = obj.payld[idx];
+              wifi_ssids.add(new Option(ssid,ssid), undefined);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+// Called when a WebSocket error occurs
+function onError(evt) {
+    console.log("ERROR: " + evt.data);
+}
+
+// Sends a message to the server (and prints it to the console)
+function doSend(obj) {
+    console.log("Sending: " + JSON.stringify(obj));
+    websocket.send(JSON.stringify(obj));
+}
+
+function doScan() {
+    obj = {}
+    obj.type  = "scan"
+    obj.payld = null;
+    doSend(obj);
+} 
+
+function doUpdate(type, values) {
+    obj = {}
+    obj.type  = "update"
+    obj.payld = { "type": type, "values": values};
+    doSend(obj);
+} 
+
+// Button handlers
+function onWifiRescan() {
+    doScan();
+}
+function onTzUpdate() {
+    doUpdate("tz", [tz_opts.selectedOptions[0].innerText])
+}
+function onWifiUpdate() {
+    doUpdate("wifi", [wifi_ssids.selectedOptions[0].innerText,wifi_pass.value])
+    wifi_pass.value = "";
+}
+
+// Call the init function as soon as the page loads
+window.addEventListener("load", init, false);
+
+</script>
+<style>
+  body {
+    margin: 18px;   
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 1.3vh;
+  }
+
+  table {
+    font: inherit;
+    margin-left: 3vh;
+    border-spacing: 2vh 0.5vh;
+  }
+
+  .hdr {
+    min-height: 10vh;
+    background-color: lightslategrey;
+    margin: -20px -20px 0px -20px;
+  }
+
+  .item {
+    min-height: 10vh;
+    border-radius: 20px;
+    border-color: lightslategray;
+    border: solid;
+    padding: 1.5vh;
+    margin-top: 1.5vh;
+  }
+
+  input {
+    font: inherit;
+    min-height: 2.5vh;
+  }
+
+  select {
+    font: inherit;
+    min-height: 2.5vh;
+    min-width: 100%;
+  }
+
+  button {
+    font: inherit;
+    min-width: 6vh;
+    min-height: 2.5vh;
+    margin-top: 2vh;
+  }
+
+
+</style>
+<body>
+  <div class="hdr"></div>
+
+  <div class="item"   id="stat">
+    <h1>Status</h1>
+    <table>
+      <tr>
+        <td>Time Zone</td>
+        <td>-</td>
+        <td id="stat_tz">??</td>
+      </tr>
+      <tr>
+        <td>Time</td>
+        <td>-</td>
+        <td id="stat_time">??</td>
+      </tr>
+      <tr>
+        <td>Wifi SSID</td>
+        <td>-</td>
+        <td id="stat_ssid">??</td>
+      </tr>
+      <tr>
+        <td>Wifi Status</td>
+        <td>-</td>
+        <td id="stat_conn">Not Connected</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="item" id="tz">
+    <h1>Timezone</h1>
+    <table>
+      <tr>
+        <td>Time Zones</td>
+        <td>-</td>
+        <td>
+          <select id="tz_opts">
+            <option>London (GMT)</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td><button id="tz_update" onclick="onTzUpdate()">Update</button></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="item" id="wifi">
+    <h1>Wifi</h1>
+    <table>
+      <tr>
+        <td>SSID</td>
+        <td>-</td>
+        <td>
+          <select id="wifi_ssids">
+            <option>Scanning...</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>Password</td>
+        <td>-</td>
+        <td><input id="wifi_pass"></td>
+      </tr>
+      <tr>
+        <td><button id="wifi_update" onclick="onWifiUpdate()">Update</button></td>
+        <td><button id="wifi_scan" onclick="onWifiRescan()">Rescan</button></td>
+      </tr>
+    </table>
+  </div>
+  
+   
+  </div>
+</body>
+</html>

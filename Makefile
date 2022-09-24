@@ -35,14 +35,14 @@ $(TMP)/ESPAsyncWebServer.zip: URL_ZIP=https://github.com/me-no-dev/ESPAsyncWebSe
 $(TMP)/ESPAsyncWebServer.zip:
 	curl -LJ $(URL_ZIP) -o $(@)
 
-$(TMP)/Arduino_JSON.zip: URL_ZIP=https://github.com/arduino-libraries/Arduino_JSON/archive/refs/tags/0.1.0.zip
-$(TMP)/Arduino_JSON.zip:
+$(TMP)/ArduinoJSON.zip: URL_ZIP=https://github.com/bblanchon/ArduinoJson/archive/refs/tags/v6.19.4.zip
+$(TMP)/ArduinoJSON.zip:
 	curl -LJ $(URL_ZIP) -o $(@)
 
 
 LIB_ZIPS=$(TMP)/AsyncTCP.zip \
          $(TMP)/ESPAsyncWebServer.zip \
-         $(TMP)/Arduino_JSON.zip
+         $(TMP)/ArduinoJSON.zip
 
 SRC = src/wordclock.ino \
       $(TMP)/index.h

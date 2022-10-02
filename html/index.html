@@ -29,6 +29,7 @@ function init() {
     stat_time   = document.getElementById("stat_time");
     stat_ssid   = document.getElementById("stat_ssid");
     stat_conn   = document.getElementById("stat_conn");
+    stat_ip     = document.getElementById("stat_ip");
 
     tz_opts     = document.getElementById("tz_opts");  
     tz_update   = document.getElementById("tz_update"); 
@@ -88,6 +89,7 @@ function onMessage(evt) {
             stat_time.innerHTML = obj.payld.time;
             stat_ssid.innerHTML = obj.payld.ssid;
             stat_conn.innerHTML = obj.payld.conn;
+            stat_ip.innerHTML   = obj.payld.ip;
             break;
         case "scan":
             while (wifi_ssids.options.length > 0) {
@@ -217,6 +219,11 @@ window.addEventListener("load", init, false);
         <td>Wifi Status</td>
         <td>-</td>
         <td id="stat_conn">Not Connected</td>
+      </tr>
+      <tr>
+        <td>Wifi IP</td>
+        <td>-</td>
+        <td id="stat_ip">0.0.0.0</td>
       </tr>
     </table>
   </div>

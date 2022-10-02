@@ -44,28 +44,24 @@ typedef struct WordClockState {
   String ssid;
   String key; 
   wl_status_t conn;
+  IPAddress ip;
 };
 
 WordClockState state;
-//{'type':'stat', 'payld':STATE}
-//STATE['tz']   = 'London (GMT)'
-//STATE['time'] = None
-//STATE['ssid'] = 'helloworldAP'
-//STATE['conn'] = 'Connected'
 
 //////////////////////////////////////////////
 // Wifi SSID/KEY EEPROM
 //////////////////////////////////////////////
 
 // Instantiate eeprom objects with parameter/argument names and sizes
-EEPROMClass  wifiCredSSID("eeprom0");
-EEPROMClass  wifiCredKey("eeprom1");
+EEPROMClass  wifiCredSSID("wifissid");
+EEPROMClass  wifiCredKey("wifikey");
 
 void wifiCredEEPROMInit() {
   //SSID (Max 32Bytes)
   if (!wifiCredSSID.begin(0x20)) Serial.println("EEPROM - Failed to initialise wifiCredSSID");
   //Key  (Max 63Bytes)
-  if (!wifiCredKey.begin(0x40))  Serial.println("EEPROM - Failed to initialise wifiCredSSID");
+  if (!wifiCredKey.begin(0x40))  Serial.println("EEPROM - Failed to initialise wifiCredKey");
 }
 
 void wifiCredEEPROMLoad() {
@@ -82,6 +78,23 @@ void wifiCredEEPROMStore() {
     //Key  (Max 63Bytes)
     wifiCredKey.writeString(0,state.key);
     wifiCredKey.commit();
+}
+
+void wifiCredEEPROMErase() {
+    Serial.println("!!! NVME Erasing... !!!");
+
+    //SSID (Max 32Bytes)
+    for( int i=0; i<wifiCredSSID.length(); i++) wifiCredSSID.writeByte(i,0);
+    wifiCredSSID.end();
+
+    //Key  (Max 63Bytes)
+    for( int i=0; i<wifiCredKey.length(); i++)  wifiCredKey.writeByte(i,0);
+    wifiCredKey.end();
+
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+    Serial.println("!!! NVME Erased !!!");
+    ESP.restart();
 }
 
 //////////////////////////////////////////////
@@ -106,6 +119,8 @@ void wifiSTAInit() {
   Serial.println("STA - cred: ");
   Serial.println(state.ssid.c_str());
   Serial.println(state.key.c_str());
+  WiFi.disconnect();
+  vTaskDelay(500 / portTICK_PERIOD_MS);
   state.conn = WiFi.begin(state.ssid.c_str(), state.key.c_str());
   WiFi.setAutoReconnect(true);
 
@@ -123,47 +138,66 @@ void wsNotifyClients(char * json) {
 
 void wsStatusUpdate(void * parameter) {
   for(;;){ // infinite loop
+    char tx_msg_str[1024];
     state.conn = WiFi.status();
     Serial.print("STA - State: ");
     Serial.print(state.conn);
     Serial.print(" - ");
     Serial.println(wl_status_to_string(state.conn));
     if( ws_client_cnt > 0) {
-      //ws.textAll("Status");
-      //status = WiFi.status();
-      //Serial.print("STA - State: ");
-      //Serial.print(status);
-      //Serial.print(" - ");
-      //Serial.println(wl_status_to_string(status));
+      state.ip = WiFi.localIP();
+      if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
+        tx_msg.clear();
+        //memset(tx_msg_str, 0, sizeof tx_msg_str);
+        //tx_msg_str[0] = '\0';
+        tx_msg["type"] = "stat";
+        tx_msg["payld"]["tz"]   = "??";
+        tx_msg["payld"]["time"] = "??";
+        tx_msg["payld"]["ssid"] = state.ssid.c_str();
+        tx_msg["payld"]["conn"] = wl_status_to_string(state.conn);
+        tx_msg["payld"]["ip"]   = state.ip.toString();
+        serializeJson(tx_msg, tx_msg_str);
+        wsNotifyClients(tx_msg_str);
+        xSemaphoreGive(tx_msg_sema);
+      }
     }
     vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
 
 void wsSSIDScan(void * parameter){
-  char output[1024];
   int n;
 
   if (!ssid_scan_pend) {
     ssid_scan_pend = true;
 
     if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
+
+      // If connection has failed, we need to disable WiFi before rescanning
+      // appears to be a known bug https://github.com/espressif/arduino-esp32/issues/3294
+      if (!(state.conn == WL_CONNECTED) || (state.conn == WL_DISCONNECTED)) {
+        WiFi.disconnect();
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+      }
         
+      char tx_msg_str[1024];
       n = min(5, (int)(WiFi.scanNetworks()));
       tx_msg.clear();
+      //memset(tx_msg_str, 0, sizeof tx_msg_str);
+      //tx_msg_str[0] = '\0';
       tx_msg["type"] = "scan";
       if (n == 0) {
-        tx_msg['payld'][0] = "None";
+        tx_msg["payld"][0] = "None";
       } else {
         for (int i = 0; i < n; ++i) {
           tx_msg["payld"][i] = WiFi.SSID(i);
         }
       } 
 
-      serializeJson(tx_msg, output);
+      serializeJson(tx_msg, tx_msg_str);
+      wsNotifyClients(tx_msg_str);
       xSemaphoreGive(tx_msg_sema);
     }
-    wsNotifyClients(output);
     ssid_scan_pend = false;
   }
   vTaskDelete(NULL);
@@ -184,14 +218,12 @@ void wsRxParse(void *arg, uint8_t *data, size_t len) {
     else if (strcmp(type, "update") == 0) {
       const char* payld_type = rx_msg["payld"]["type"];
       if (strcmp(payld_type, "wifi") == 0) {   // WIFI Setting Update
-        String new_ssid = rx_msg["payld"]["values"][0];
-        String new_key  = rx_msg["payld"]["values"][1];
-        if (new_ssid != state.ssid || new_key != state.key){
-          state.ssid = new_ssid;
-          state.key  = new_key;
-          wifiSTAInit();
-          wifiCredEEPROMStore();
-        }
+        String ssid = rx_msg["payld"]["values"][0];
+        String key  = rx_msg["payld"]["values"][1];
+        state.ssid = ssid;
+        state.key  = key;
+        wifiCredEEPROMStore();
+        wifiSTAInit();
       }
       else if (strcmp(payld_type, "tz") == 0) { // Timezone Setting Update
         Serial.println("Timezone Update Not Yet Supported!");
@@ -240,6 +272,7 @@ void wsInit() {
 }
 
 void setup() {
+  pinMode(0, INPUT); // Use BOOT Button for NVME reset, 0=Pressed, 1=Not
   Serial.begin(115200);
 
   wifiCredEEPROMInit();
@@ -258,7 +291,7 @@ void setup() {
   xTaskCreate(
      wsStatusUpdate,   // Function that should be called
      "wsStatusUpdate", // Name of the task (for debugging)
-     1000,             // Stack size (bytes)
+     4096,             // Stack size (bytes)
      NULL,             // Parameter to pass
      1,                // Task priority
      NULL              // Task handle
@@ -270,6 +303,18 @@ void setup() {
 
 }
 
+int reset_cnt;
 void loop() {
+
+  // If BOOT button held for 10seconds reset NVME
+  reset_cnt = 0;
+  while ( !digitalRead(0) ) {
+    reset_cnt++;
+    if ( reset_cnt >= 100 ) {
+        wifiCredEEPROMErase();
+    }
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+  }
+   
   ws.cleanupClients();
 }

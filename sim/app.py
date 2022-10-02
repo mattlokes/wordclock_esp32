@@ -5,6 +5,7 @@ from flask_sock import Sock
 
 from datetime import datetime
 import random
+import socket
 
 FAKE_SSIDS = [
 "echoAP",
@@ -32,9 +33,11 @@ STATE['tz']   = 'London (GMT)'
 STATE['time'] = None
 STATE['ssid'] = 'helloworldAP'
 STATE['conn'] = 'Connected'
+STATE['ip']   = None
 
 def updateState():
     STATE['time'] = datetime.now().strftime("%H:%M:%S")
+    STATE['ip']   = str(socket.gethostbyname(socket.gethostname()))
 
 def sendStatus(ws):
     updateState()

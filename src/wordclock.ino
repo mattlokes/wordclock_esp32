@@ -3,6 +3,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <EEPROM.h>
 
 // Index HTML Minified and converted into a index_html const string.
 #include "index.h"
@@ -25,10 +26,24 @@ bool ssid_scan_pend = false;
 DynamicJsonDocument rx_msg(512);
 DynamicJsonDocument tx_msg(1024);
 
+SemaphoreHandle_t tx_msg_sema;
+
+String wl_status_to_string(wl_status_t status) {
+  switch (status) {
+    case WL_CONNECTED:       return "Connected";
+    case WL_CONNECT_FAILED:  return "Invalid Key";
+    case WL_NO_SSID_AVAIL:
+    case WL_CONNECTION_LOST: return "Invalid SSID";
+    case WL_DISCONNECTED: 
+    default:                 return "Disconnected";
+    
+  }
+}
+
 typedef struct WordClockState {
   String ssid;
   String key; 
-  String conn;
+  wl_status_t conn;
 };
 
 WordClockState state;
@@ -41,6 +56,33 @@ WordClockState state;
 //////////////////////////////////////////////
 // Wifi SSID/KEY EEPROM
 //////////////////////////////////////////////
+
+// Instantiate eeprom objects with parameter/argument names and sizes
+EEPROMClass  wifiCredSSID("eeprom0");
+EEPROMClass  wifiCredKey("eeprom1");
+
+void wifiCredEEPROMInit() {
+  //SSID (Max 32Bytes)
+  if (!wifiCredSSID.begin(0x20)) Serial.println("EEPROM - Failed to initialise wifiCredSSID");
+  //Key  (Max 63Bytes)
+  if (!wifiCredKey.begin(0x40))  Serial.println("EEPROM - Failed to initialise wifiCredSSID");
+}
+
+void wifiCredEEPROMLoad() {
+    //SSID (Max 32Bytes)
+    wifiCredSSID.get(0,state.ssid);
+    //Key  (Max 63Bytes)
+    wifiCredKey.get(0,state.key);
+}
+
+void wifiCredEEPROMStore() {
+    //SSID (Max 32Bytes)
+    wifiCredSSID.writeString(0,state.ssid);
+    wifiCredSSID.commit();
+    //Key  (Max 63Bytes)
+    wifiCredKey.writeString(0,state.key);
+    wifiCredKey.commit();
+}
 
 //////////////////////////////////////////////
 // Wifi AP
@@ -55,6 +97,21 @@ void wifiAPInit() {
 
 }
 
+//////////////////////////////////////////////
+// Wifi STA
+//////////////////////////////////////////////
+void wifiSTAInit() {
+
+  //wifiCredEEPROMLoad();
+  Serial.println("STA - cred: ");
+  Serial.println(state.ssid.c_str());
+  Serial.println(state.key.c_str());
+  state.conn = WiFi.begin(state.ssid.c_str(), state.key.c_str());
+  WiFi.setAutoReconnect(true);
+
+}
+
+
 /////////////////////////////////////////////
 // Websocket Handling
 /////////////////////////////////////////////
@@ -66,11 +123,20 @@ void wsNotifyClients(char * json) {
 
 void wsStatusUpdate(void * parameter) {
   for(;;){ // infinite loop
+    state.conn = WiFi.status();
+    Serial.print("STA - State: ");
+    Serial.print(state.conn);
+    Serial.print(" - ");
+    Serial.println(wl_status_to_string(state.conn));
     if( ws_client_cnt > 0) {
       //ws.textAll("Status");
-      Serial.println("Status");
+      //status = WiFi.status();
+      //Serial.print("STA - State: ");
+      //Serial.print(status);
+      //Serial.print(" - ");
+      //Serial.println(wl_status_to_string(status));
     }
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -80,19 +146,23 @@ void wsSSIDScan(void * parameter){
 
   if (!ssid_scan_pend) {
     ssid_scan_pend = true;
-    n = min(5, (int)(WiFi.scanNetworks()));
 
-    tx_msg.clear();
-    tx_msg["type"] = "scan";
-    if (n == 0) {
-      tx_msg['payld'][0] = "None";
-    } else {
-      for (int i = 0; i < n; ++i) {
-        tx_msg["payld"][i] = WiFi.SSID(i);
-      }
-    } 
+    if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
+        
+      n = min(5, (int)(WiFi.scanNetworks()));
+      tx_msg.clear();
+      tx_msg["type"] = "scan";
+      if (n == 0) {
+        tx_msg['payld'][0] = "None";
+      } else {
+        for (int i = 0; i < n; ++i) {
+          tx_msg["payld"][i] = WiFi.SSID(i);
+        }
+      } 
 
-    serializeJson(tx_msg, output);
+      serializeJson(tx_msg, output);
+      xSemaphoreGive(tx_msg_sema);
+    }
     wsNotifyClients(output);
     ssid_scan_pend = false;
   }
@@ -112,7 +182,25 @@ void wsRxParse(void *arg, uint8_t *data, size_t len) {
       xTaskCreate( wsSSIDScan, "wsSSIDScan", 4096, NULL, 1, NULL );
     }
     else if (strcmp(type, "update") == 0) {
-      Serial.println("Update");
+      const char* payld_type = rx_msg["payld"]["type"];
+      if (strcmp(payld_type, "wifi") == 0) {   // WIFI Setting Update
+        String new_ssid = rx_msg["payld"]["values"][0];
+        String new_key  = rx_msg["payld"]["values"][1];
+        if (new_ssid != state.ssid || new_key != state.key){
+          state.ssid = new_ssid;
+          state.key  = new_key;
+          wifiSTAInit();
+          wifiCredEEPROMStore();
+        }
+      }
+      else if (strcmp(payld_type, "tz") == 0) { // Timezone Setting Update
+        Serial.println("Timezone Update Not Yet Supported!");
+      }
+      else {
+        Serial.print("Invalid Ws Update Msg Payload Type: ");
+        Serial.println(payld_type);
+      }
+      
     }
     else {
       Serial.print("Invalid Ws Msg Type: ");
@@ -144,12 +232,19 @@ void wsRxEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 void wsInit() {
   ws.onEvent(wsRxEvent);
   server.addHandler(&ws);
+
+  // Tx Msg Semaphore
+  tx_msg_sema= xSemaphoreCreateBinary();
+  if ( tx_msg_sema != NULL )
+      xSemaphoreGive( tx_msg_sema );
 }
 
 void setup() {
   Serial.begin(115200);
-  wifiAPInit();
 
+  wifiCredEEPROMInit();
+
+  wifiAPInit();
   wsInit();
   
   // Web Server Root URL
@@ -168,6 +263,10 @@ void setup() {
      1,                // Task priority
      NULL              // Task handle
   );
+
+  // Try to connect to STA
+  wifiCredEEPROMLoad();
+  wifiSTAInit();
 
 }
 

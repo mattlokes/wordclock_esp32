@@ -54,42 +54,37 @@ WordClockState state;
 //////////////////////////////////////////////
 
 // Instantiate eeprom objects with parameter/argument names and sizes
-EEPROMClass  wifiCredSSID("wifissid");
-EEPROMClass  wifiCredKey("wifikey");
 
 void wifiCredEEPROMInit() {
-  //SSID (Max 32Bytes)
-  if (!wifiCredSSID.begin(0x20)) Serial.println("EEPROM - Failed to initialise wifiCredSSID");
-  //Key  (Max 63Bytes)
-  if (!wifiCredKey.begin(0x40))  Serial.println("EEPROM - Failed to initialise wifiCredKey");
+  // EEPROM use 128Bytes
+  //  - SSID (Max 32Bytes) [ Addr 0x0 - 0x1F ]
+  //  - Key  (Max 63Bytes) [ Addr 0x3F -0x7F ]
+  if (!EEPROM.begin(0x80)) Serial.println("EEPROM - Failed to initialise wifiCred");
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  Serial.println("EEPROM - Initialised wifiCred EEPROM");
 }
 
 void wifiCredEEPROMLoad() {
-    //SSID (Max 32Bytes)
-    wifiCredSSID.get(0,state.ssid);
-    //Key  (Max 63Bytes)
-    wifiCredKey.get(0,state.key);
+    //SSID (Max 32Bytes) [ Addr 0x0 - 0x1F ]
+    EEPROM.get(0,state.ssid);
+    //Key  (Max 63Bytes) [ Addr 0x3F -0x7F ]
+    EEPROM.get(0x3F,state.key);
 }
 
 void wifiCredEEPROMStore() {
-    //SSID (Max 32Bytes)
-    wifiCredSSID.writeString(0,state.ssid);
-    wifiCredSSID.commit();
-    //Key  (Max 63Bytes)
-    wifiCredKey.writeString(0,state.key);
-    wifiCredKey.commit();
+    //SSID (Max 32Bytes) [ Addr 0x0 - 0x1F ]
+    EEPROM.put(0,state.ssid);
+    //Key  (Max 63Bytes) [ Addr 0x3F -0x7F ]
+    EEPROM.put(0x3F,state.key);
+    EEPROM.commit();
 }
 
 void wifiCredEEPROMErase() {
     Serial.println("!!! NVME Erasing... !!!");
 
     //SSID (Max 32Bytes)
-    for( int i=0; i<wifiCredSSID.length(); i++) wifiCredSSID.writeByte(i,0);
-    wifiCredSSID.end();
-
-    //Key  (Max 63Bytes)
-    for( int i=0; i<wifiCredKey.length(); i++)  wifiCredKey.writeByte(i,0);
-    wifiCredKey.end();
+    for( int i=0; i<EEPROM.length(); i++) EEPROM.write(i,0);
+    EEPROM.end();
 
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 

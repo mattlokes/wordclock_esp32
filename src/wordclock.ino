@@ -220,30 +220,39 @@ void wsNotifyClients(char * json) {
   ws.textAll(json);
 }
 
-void wsStatusUpdate(void * parameter) {
-  for(;;){ // infinite loop
-    char tx_msg_str[1024];
-    state.conn = WiFi.status();
-    ntpUpdate();
-    //Serial.print("STA - State: ");
-    //Serial.print(state.conn);
-    //Serial.print(" - ");
-    //Serial.println(wl_status_to_string(state.conn));
-    if( ws_client_cnt > 0) {
-      state.ip = WiFi.localIP();
-      if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
-        tx_msg.clear();
-        tx_msg["type"] = "stat";
-        tx_msg["payld"]["tz"]   = state.eeprom.tz;
-        tx_msg["payld"]["time"] = ntpTimeStr();
-        tx_msg["payld"]["ssid"] = state.eeprom.ssid;
-        tx_msg["payld"]["conn"] = wl_status_to_string(state.conn);
-        tx_msg["payld"]["ip"]   = state.ip.toString();
-        serializeJson(tx_msg, tx_msg_str);
-        wsNotifyClients(tx_msg_str);
-        xSemaphoreGive(tx_msg_sema);
-      }
+void wsStatusUpdate() {
+  char tx_msg_str[1024];
+  state.conn = WiFi.status();
+  ntpUpdate();
+  //Serial.print("STA - State: ");
+  //Serial.print(state.conn);
+  //Serial.print(" - ");
+  //Serial.println(wl_status_to_string(state.conn));
+  if( ws_client_cnt > 0) {
+    state.ip = WiFi.localIP();
+    if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
+      tx_msg.clear();
+      tx_msg["type"] = "stat";
+      tx_msg["payld"]["tz"]   = state.eeprom.tz;
+      tx_msg["payld"]["time"] = ntpTimeStr();
+      tx_msg["payld"]["ssid"] = state.eeprom.ssid;
+      tx_msg["payld"]["conn"] = wl_status_to_string(state.conn);
+      tx_msg["payld"]["ip"]   = state.ip.toString();
+      serializeJson(tx_msg, tx_msg_str);
+      wsNotifyClients(tx_msg_str);
+      xSemaphoreGive(tx_msg_sema);
     }
+  }
+}
+
+void statusUpdateImmediate(void * parameter) {
+  wsStatusUpdate();
+  vTaskDelete(NULL);
+}
+
+void statusUpdater(void * parameter) {
+  for(;;){ // infinite loop
+    wsStatusUpdate();
     vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
@@ -254,17 +263,17 @@ void wsSSIDScan(void * parameter) {
   if (!ssid_scan_pend) {
     ssid_scan_pend = true;
 
-    if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
+    // If connection has failed, we need to disable WiFi before rescanning
+    // appears to be a known bug https://github.com/espressif/arduino-esp32/issues/3294
+    if (!(state.conn == WL_CONNECTED) || (state.conn == WL_DISCONNECTED)) {
+      WiFi.disconnect();
+      vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+    n = min(5, (int)(WiFi.scanNetworks()));
 
-      // If connection has failed, we need to disable WiFi before rescanning
-      // appears to be a known bug https://github.com/espressif/arduino-esp32/issues/3294
-      if (!(state.conn == WL_CONNECTED) || (state.conn == WL_DISCONNECTED)) {
-        WiFi.disconnect();
-        vTaskDelay(500 / portTICK_PERIOD_MS);
-      }
+    if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
         
       char tx_msg_str[1024];
-      n = min(5, (int)(WiFi.scanNetworks()));
       tx_msg.clear();
       //memset(tx_msg_str, 0, sizeof tx_msg_str);
       //tx_msg_str[0] = '\0';
@@ -335,6 +344,7 @@ void wsRxEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     case WS_EVT_CONNECT:
       Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
       ++ws_client_cnt;
+      xTaskCreate( statusUpdateImmediate, "statusUpdateImmediate", 4096, NULL, 1, NULL );
       break;
     case WS_EVT_DISCONNECT:
       Serial.printf("WebSocket client #%u disconnected\n", client->id());
@@ -379,8 +389,8 @@ void setup() {
   server.begin();
 
   xTaskCreate(
-     wsStatusUpdate,   // Function that should be called
-     "wsStatusUpdate", // Name of the task (for debugging)
+     statusUpdater,   // Function that should be called
+     "statusUpdater", // Name of the task (for debugging)
      4096,             // Stack size (bytes)
      NULL,             // Parameter to pass
      1,                // Task priority

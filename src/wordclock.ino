@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <DNSServer.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -9,8 +10,11 @@
 #include "index.h"
 
 // Replace with your network credentials
-const char* ap_ssid = "wordclock";
+const char* ap_ssid = "Wordclock";
 const char* ap_password = "helloworld";
+
+// Create DNS Server for captive portal
+DNSServer dnsServer;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -92,6 +96,7 @@ void wifiCredEEPROMErase() {
     ESP.restart();
 }
 
+
 //////////////////////////////////////////////
 // Wifi AP
 //////////////////////////////////////////////
@@ -106,6 +111,26 @@ void wifiAPInit() {
 }
 
 //////////////////////////////////////////////
+// WIFI AP - Captive Portal
+//////////////////////////////////////////////
+
+class CaptiveRequestHandler : public AsyncWebHandler {
+public:
+  CaptiveRequestHandler() {}
+  virtual ~CaptiveRequestHandler() {}
+
+  bool canHandle(AsyncWebServerRequest *request){
+    //request->addInterestingHeader("ANY");
+    return true;
+  }
+
+  void handleRequest(AsyncWebServerRequest *request) {
+    request->send(200, "text/html", index_html); 
+    //request->send_P(200, "text/html", index_html); 
+  }
+};
+
+//////////////////////////////////////////////
 // Wifi STA
 //////////////////////////////////////////////
 void wifiSTAInit() {
@@ -118,6 +143,21 @@ void wifiSTAInit() {
   vTaskDelay(500 / portTICK_PERIOD_MS);
   state.conn = WiFi.begin(state.ssid.c_str(), state.key.c_str());
   WiFi.setAutoReconnect(true);
+
+}
+
+/////////////////////////////////////////////
+// HTML Handling
+/////////////////////////////////////////////
+
+void serverInit() {
+
+  // Web Server Root URL
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/html", index_html);
+  });
+
+  server.addHandler(new CaptiveRequestHandler()).setFilter(ON_AP_FILTER);
 
 }
 
@@ -274,12 +314,11 @@ void setup() {
 
   wifiAPInit();
   wsInit();
+  serverInit(); 
   
-  // Web Server Root URL
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/html", index_html);
-  });
-  
+  // State DNS Server for captive portal.
+  dnsServer.start(53, "*", WiFi.softAPIP());
+
   // Start server
   server.begin();
 
@@ -310,6 +349,7 @@ void loop() {
     }
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
-   
+ 
+  dnsServer.processNextRequest();  
   ws.cleanupClients();
 }

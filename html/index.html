@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" 
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>Wordclock</title>
 </head>
 <script language="javascript" type="text/javascript">
@@ -150,13 +152,22 @@ window.addEventListener("load", init, false);
   body {
     margin: 18px;   
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 1.3vh;
+    font-size: 1.8vh;
+  }
+
+  h1 {
+    margin-top: 1vh;
+    font-size: 3vh;
   }
 
   table {
     font: inherit;
     margin-left: 3vh;
     border-spacing: 2vh 0.5vh;
+  }
+
+  table.rowSpaced td {
+    padding-bottom: 2vh;
   }
 
   .hdr {
@@ -171,24 +182,25 @@ window.addEventListener("load", init, false);
     border-color: lightslategray;
     border: solid;
     padding: 1.5vh;
-    margin-top: 1.5vh;
+    margin-top: 2vh;
+    overflow: hidden;
   }
 
   input {
     font: inherit;
-    min-height: 2.5vh;
+    min-height: 4vh;
   }
 
   select {
     font: inherit;
-    min-height: 2.5vh;
+    min-height: 4vh;
     min-width: 100%;
   }
 
   button {
     font: inherit;
-    min-width: 6vh;
-    min-height: 2.5vh;
+    min-width: 8vh;
+    min-height: 4vh;
     margin-top: 2vh;
   }
 
@@ -230,7 +242,7 @@ window.addEventListener("load", init, false);
 
   <div class="item" id="tz">
     <h1>Timezone</h1>
-    <table>
+    <table class="rowSpaced">
       <tr>
         <td>Time Zones</td>
         <td>-</td>
@@ -241,6 +253,8 @@ window.addEventListener("load", init, false);
         </td>
       </tr>
       <tr>
+        <td></td>
+        <td></td>
         <td><button id="tz_update" onclick="onTzUpdate()">Update</button></td>
       </tr>
     </table>
@@ -248,7 +262,7 @@ window.addEventListener("load", init, false);
 
   <div class="item" id="wifi">
     <h1>Wifi</h1>
-    <table>
+    <table class="rowSpaced">
       <tr>
         <td>SSID</td>
         <td>-</td>
@@ -264,8 +278,9 @@ window.addEventListener("load", init, false);
         <td><input id="wifi_pass"></td>
       </tr>
       <tr>
-        <td><button id="wifi_update" onclick="onWifiUpdate()">Update</button></td>
         <td><button id="wifi_scan" onclick="onWifiRescan()">Rescan</button></td>
+        <td></td>
+        <td><button id="wifi_update" onclick="onWifiUpdate()">Update</button></td>
       </tr>
     </table>
   </div>

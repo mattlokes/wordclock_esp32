@@ -45,13 +45,17 @@ String wl_status_to_string(wl_status_t status) {
   }
 }
 
+typedef struct EEPROMState {
+  char        ssid   [32];
+  char        key    [64]; 
+  char        tz     [32];
+  char        tz_enc [64];
+};
+
 typedef struct WordClockState {
-  String      ssid;
-  String      key; 
+  EEPROMState eeprom;
   wl_status_t conn;
   IPAddress   ip;
-  String      tz;
-  String      tz_enc;
   struct tm   time;
   bool        time_vld;
 };
@@ -62,12 +66,12 @@ WordClockState state;
 // NTP
 //////////////////////////////////////////////
 
-const char*  ntpServer = "pool.ntp.org";
-const String tz_default     = "GMT";
-const String tz_enc_default = "GMT0";
+const char* ntpServer = "pool.ntp.org";
+const char* tz_default     = "GMT";
+const char* tz_enc_default = "GMT0";
 
 void ntpInit( ) {
-  configTzTime(state.tz_enc.c_str(), ntpServer);
+  configTzTime(state.eeprom.tz_enc, ntpServer);
 }
 
 void ntpUpdate() {
@@ -93,63 +97,41 @@ String ntpTimeStr() {
 // Wifi SSID/KEY EEPROM
 //////////////////////////////////////////////
 
-// Instantiate eeprom objects with parameter/argument names and sizes
-const int eeprom_ssid_len   = 32;
-const int eeprom_key_len    = 64;
-const int eeprom_tz_len     = 32;
-const int eeprom_tz_enc_len = 64;
-const int eeprom_len        = eeprom_ssid_len + eeprom_key_len + eeprom_tz_len + eeprom_tz_enc_len;
 
-const int eeprom_ssid_addr   = 0;
-const int eeprom_key_addr    = eeprom_ssid_addr + eeprom_ssid_len;
-const int eeprom_tz_addr     = eeprom_key_addr  + eeprom_key_len;
-const int eeprom_tz_enc_addr = eeprom_tz_addr   + eeprom_tz_len; 
+// Instantiate eeprom objects with parameter/argument names and sizes
 
 void EEPROMInit() {
-  if (!EEPROM.begin(512)) Serial.println("EEPROM - Failed to initialise");
+  if (!EEPROM.begin(sizeof(struct EEPROMState))) Serial.println("EEPROM - Failed to initialise");
   vTaskDelay(2000 / portTICK_PERIOD_MS);
   Serial.println("EEPROM - Initialised EEPROM");
 }
 
-void wifiCredEEPROMLoad() {
-    EEPROM.get(eeprom_ssid_addr, state.ssid); // SSID
-    EEPROM.get(eeprom_key_addr,  state.key);  // KEY
-
-    Serial.print("EEPROM - SSID  : ");
-    Serial.println(state.ssid);
-    Serial.print("EEPROM - KEY   : ");
-    Serial.println(state.key);
-}
-
-void wifiCredEEPROMStore() {
-    EEPROM.put(eeprom_ssid_addr, state.ssid); // SSID
-    EEPROM.put(eeprom_key_addr,  state.key);  // KEY
-    EEPROM.commit();
-}
-
-void tzEEPROMLoad() {
-    EEPROM.get(eeprom_tz_addr,     state.tz);     // TZ
-    EEPROM.get(eeprom_tz_enc_addr, state.tz_enc); // TZ_ENC
+void EEPROMLoad() {
+    EEPROM.get(0, state.eeprom);
 
     // Set Defaults if either have a 0 byte as first byte.
-    if ( ((char)state.tz[0]     == 0) ||
-         ((char)state.tz_enc[0] == 0)   ) {
-      state.tz     = tz_default;
-      state.tz_enc = tz_enc_default;
+    if ( (state.eeprom.tz[0]     == 0) ||
+         (state.eeprom.tz_enc[0] == 0)   ) {
+      strncpy(state.eeprom.tz,     tz_default,     sizeof(state.eeprom.tz));
+      strncpy(state.eeprom.tz_enc, tz_enc_default, sizeof(state.eeprom.tz_enc));
     }
 
+    Serial.print("EEPROM - SSID  : ");
+    Serial.println(state.eeprom.ssid);
+    Serial.print("EEPROM - KEY   : ");
+    Serial.println(state.eeprom.key);
     Serial.print("EEPROM - TZ    : ");
-    Serial.println(state.tz);
+    Serial.println(state.eeprom.tz);
     Serial.print("EEPROM - TZ Enc: ");
-    Serial.println(state.tz_enc);
-
+    Serial.println(state.eeprom.tz_enc);
 }
 
-void tzEEPROMStore() {
-    EEPROM.put(eeprom_tz_addr,     state.tz);     // TZ
-    EEPROM.put(eeprom_tz_enc_addr, state.tz_enc.c_str()); // TZ_ENC
+
+void EEPROMStore() {
+    EEPROM.put(0, state.eeprom); // SSID
     EEPROM.commit();
 }
+
 
 void EEPROMErase() {
     Serial.println("!!! NVME Erasing... !!!");
@@ -203,12 +185,12 @@ public:
 void wifiSTAInit() {
 
   Serial.print("STA - SSID : ");
-  Serial.println(state.ssid.c_str());
+  Serial.println(state.eeprom.ssid);
   Serial.print("STA - KEY  : ");
-  Serial.println(state.key.c_str());
+  Serial.println(state.eeprom.key);
   WiFi.disconnect();
   vTaskDelay(500 / portTICK_PERIOD_MS);
-  state.conn = WiFi.begin(state.ssid.c_str(), state.key.c_str());
+  state.conn = WiFi.begin(state.eeprom.ssid, state.eeprom.key);
   WiFi.setAutoReconnect(true);
 
 }
@@ -251,12 +233,10 @@ void wsStatusUpdate(void * parameter) {
       state.ip = WiFi.localIP();
       if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
         tx_msg.clear();
-        //memset(tx_msg_str, 0, sizeof tx_msg_str);
-        //tx_msg_str[0] = '\0';
         tx_msg["type"] = "stat";
-        tx_msg["payld"]["tz"]   = state.tz;
+        tx_msg["payld"]["tz"]   = state.eeprom.tz;
         tx_msg["payld"]["time"] = ntpTimeStr();
-        tx_msg["payld"]["ssid"] = state.ssid.c_str();
+        tx_msg["payld"]["ssid"] = state.eeprom.ssid;
         tx_msg["payld"]["conn"] = wl_status_to_string(state.conn);
         tx_msg["payld"]["ip"]   = state.ip.toString();
         serializeJson(tx_msg, tx_msg_str);
@@ -323,17 +303,17 @@ void wsRxParse(void *arg, uint8_t *data, size_t len) {
       if (strcmp(payld_type, "wifi") == 0) {   // WIFI Setting Update
         String ssid = rx_msg["payld"]["values"][0];
         String key  = rx_msg["payld"]["values"][1];
-        state.ssid = ssid;
-        state.key  = key;
-        wifiCredEEPROMStore();
+        strncpy(state.eeprom.ssid, ssid.c_str(), sizeof(state.eeprom.ssid));
+        strncpy(state.eeprom.key,  key.c_str(),  sizeof(state.eeprom.key));
+        EEPROMStore();
         wifiSTAInit();
       }
       else if (strcmp(payld_type, "tz") == 0) { // Timezone Setting Update
         String tz      = rx_msg["payld"]["values"][0];
         String tz_enc  = rx_msg["payld"]["values"][1];
-        state.tz     = tz;
-        state.tz_enc = tz_enc;
-        tzEEPROMStore();
+        strncpy(state.eeprom.tz,     tz.c_str(),     sizeof(state.eeprom.tz));
+        strncpy(state.eeprom.tz_enc, tz_enc.c_str(), sizeof(state.eeprom.tz_enc));
+        EEPROMStore();
         ntpInit();
       }
       else {
@@ -385,8 +365,7 @@ void setup() {
 
   // Initialize EEPROM and fetch values
   EEPROMInit();
-  wifiCredEEPROMLoad();
-  tzEEPROMLoad();
+  EEPROMLoad();
 
   // Initialise WiFi AP, Websocket Server, HTML Server
   wifiAPInit();

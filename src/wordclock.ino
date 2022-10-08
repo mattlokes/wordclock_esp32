@@ -50,6 +50,8 @@ typedef struct WordClockState {
   String      key; 
   wl_status_t conn;
   IPAddress   ip;
+  String      tz;
+  String      tz_enc;
   struct tm   time;
   bool        time_vld;
 };
@@ -57,58 +59,15 @@ typedef struct WordClockState {
 WordClockState state;
 
 //////////////////////////////////////////////
-// Wifi SSID/KEY EEPROM
-//////////////////////////////////////////////
-
-// Instantiate eeprom objects with parameter/argument names and sizes
-
-void wifiCredEEPROMInit() {
-  // EEPROM use 128Bytes
-  //  - SSID (Max 32Bytes) [ Addr 0x0 - 0x1F ]
-  //  - Key  (Max 63Bytes) [ Addr 0x3F -0x7F ]
-  if (!EEPROM.begin(0x80)) Serial.println("EEPROM - Failed to initialise wifiCred");
-  vTaskDelay(2000 / portTICK_PERIOD_MS);
-  Serial.println("EEPROM - Initialised wifiCred EEPROM");
-}
-
-void wifiCredEEPROMLoad() {
-    //SSID (Max 32Bytes) [ Addr 0x0 - 0x1F ]
-    EEPROM.get(0,state.ssid);
-    //Key  (Max 63Bytes) [ Addr 0x3F -0x7F ]
-    EEPROM.get(0x3F,state.key);
-}
-
-void wifiCredEEPROMStore() {
-    //SSID (Max 32Bytes) [ Addr 0x0 - 0x1F ]
-    EEPROM.put(0,state.ssid);
-    //Key  (Max 63Bytes) [ Addr 0x3F -0x7F ]
-    EEPROM.put(0x3F,state.key);
-    EEPROM.commit();
-}
-
-void wifiCredEEPROMErase() {
-    Serial.println("!!! NVME Erasing... !!!");
-
-    //SSID (Max 32Bytes)
-    for( int i=0; i<EEPROM.length(); i++) EEPROM.write(i,0);
-    EEPROM.end();
-
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-    Serial.println("!!! NVME Erased !!!");
-    ESP.restart();
-}
-
-//////////////////////////////////////////////
 // NTP
 //////////////////////////////////////////////
 
-const char* ntpServer = "pool.ntp.org";
-const long  gmtOffset_sec = 0;
-const int   daylightOffset_sec = 3600;
+const char*  ntpServer = "pool.ntp.org";
+const String tz_default     = "GMT";
+const String tz_enc_default = "GMT0";
 
 void ntpInit( ) {
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  configTzTime(state.tz_enc.c_str(), ntpServer);
 }
 
 void ntpUpdate() {
@@ -127,6 +86,82 @@ String ntpTimeStr() {
  strftime(timeStringBuff, sizeof(timeStringBuff), "%H:%M:%S", &state.time);
  String asString(timeStringBuff);
  return timeStringBuff;
+}
+
+
+//////////////////////////////////////////////
+// Wifi SSID/KEY EEPROM
+//////////////////////////////////////////////
+
+// Instantiate eeprom objects with parameter/argument names and sizes
+const int eeprom_ssid_len   = 32;
+const int eeprom_key_len    = 64;
+const int eeprom_tz_len     = 32;
+const int eeprom_tz_enc_len = 64;
+const int eeprom_len        = eeprom_ssid_len + eeprom_key_len + eeprom_tz_len + eeprom_tz_enc_len;
+
+const int eeprom_ssid_addr   = 0;
+const int eeprom_key_addr    = eeprom_ssid_addr + eeprom_ssid_len;
+const int eeprom_tz_addr     = eeprom_key_addr  + eeprom_key_len;
+const int eeprom_tz_enc_addr = eeprom_tz_addr   + eeprom_tz_len; 
+
+void EEPROMInit() {
+  if (!EEPROM.begin(512)) Serial.println("EEPROM - Failed to initialise");
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  Serial.println("EEPROM - Initialised EEPROM");
+}
+
+void wifiCredEEPROMLoad() {
+    EEPROM.get(eeprom_ssid_addr, state.ssid); // SSID
+    EEPROM.get(eeprom_key_addr,  state.key);  // KEY
+
+    Serial.print("EEPROM - SSID  : ");
+    Serial.println(state.ssid);
+    Serial.print("EEPROM - KEY   : ");
+    Serial.println(state.key);
+}
+
+void wifiCredEEPROMStore() {
+    EEPROM.put(eeprom_ssid_addr, state.ssid); // SSID
+    EEPROM.put(eeprom_key_addr,  state.key);  // KEY
+    EEPROM.commit();
+}
+
+void tzEEPROMLoad() {
+    EEPROM.get(eeprom_tz_addr,     state.tz);     // TZ
+    EEPROM.get(eeprom_tz_enc_addr, state.tz_enc); // TZ_ENC
+
+    // Set Defaults if either have a 0 byte as first byte.
+    if ( ((char)state.tz[0]     == 0) ||
+         ((char)state.tz_enc[0] == 0)   ) {
+      state.tz     = tz_default;
+      state.tz_enc = tz_enc_default;
+    }
+
+    Serial.print("EEPROM - TZ    : ");
+    Serial.println(state.tz);
+    Serial.print("EEPROM - TZ Enc: ");
+    Serial.println(state.tz_enc);
+
+}
+
+void tzEEPROMStore() {
+    EEPROM.put(eeprom_tz_addr,     state.tz);     // TZ
+    EEPROM.put(eeprom_tz_enc_addr, state.tz_enc.c_str()); // TZ_ENC
+    EEPROM.commit();
+}
+
+void EEPROMErase() {
+    Serial.println("!!! NVME Erasing... !!!");
+
+    //SSID (Max 32Bytes)
+    for( int i=0; i<EEPROM.length(); i++) EEPROM.write(i,0);
+    EEPROM.end();
+
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+    Serial.println("!!! NVME Erased !!!");
+    ESP.restart();
 }
 
 //////////////////////////////////////////////
@@ -167,9 +202,9 @@ public:
 //////////////////////////////////////////////
 void wifiSTAInit() {
 
-  //wifiCredEEPROMLoad();
-  Serial.println("STA - cred: ");
+  Serial.print("STA - SSID : ");
   Serial.println(state.ssid.c_str());
+  Serial.print("STA - KEY  : ");
   Serial.println(state.key.c_str());
   WiFi.disconnect();
   vTaskDelay(500 / portTICK_PERIOD_MS);
@@ -219,7 +254,7 @@ void wsStatusUpdate(void * parameter) {
         //memset(tx_msg_str, 0, sizeof tx_msg_str);
         //tx_msg_str[0] = '\0';
         tx_msg["type"] = "stat";
-        tx_msg["payld"]["tz"]   = "??";
+        tx_msg["payld"]["tz"]   = state.tz;
         tx_msg["payld"]["time"] = ntpTimeStr();
         tx_msg["payld"]["ssid"] = state.ssid.c_str();
         tx_msg["payld"]["conn"] = wl_status_to_string(state.conn);
@@ -233,7 +268,7 @@ void wsStatusUpdate(void * parameter) {
   }
 }
 
-void wsSSIDScan(void * parameter){
+void wsSSIDScan(void * parameter) {
   int n;
 
   if (!ssid_scan_pend) {
@@ -294,7 +329,12 @@ void wsRxParse(void *arg, uint8_t *data, size_t len) {
         wifiSTAInit();
       }
       else if (strcmp(payld_type, "tz") == 0) { // Timezone Setting Update
-        Serial.println("Timezone Update Not Yet Supported!");
+        String tz      = rx_msg["payld"]["values"][0];
+        String tz_enc  = rx_msg["payld"]["values"][1];
+        state.tz     = tz;
+        state.tz_enc = tz_enc;
+        tzEEPROMStore();
+        ntpInit();
       }
       else {
         Serial.print("Invalid Ws Update Msg Payload Type: ");
@@ -343,16 +383,20 @@ void setup() {
   pinMode(0, INPUT); // Use BOOT Button for NVME reset, 0=Pressed, 1=Not
   Serial.begin(115200);
 
-  wifiCredEEPROMInit();
+  // Initialize EEPROM and fetch values
+  EEPROMInit();
+  wifiCredEEPROMLoad();
+  tzEEPROMLoad();
 
+  // Initialise WiFi AP, Websocket Server, HTML Server
   wifiAPInit();
   wsInit();
   serverInit(); 
   
-  // State DNS Server for captive portal.
+  // Initialise DNS Server for captive portal.
   dnsServer.start(53, "*", WiFi.softAPIP());
 
-  // Start server
+  // Start HTML Server
   server.begin();
 
   xTaskCreate(
@@ -364,9 +408,9 @@ void setup() {
      NULL              // Task handle
   );
 
-  // Try to connect to STA
-  wifiCredEEPROMLoad();
+  // Initialise WiFi Station, try to connect to WiFi
   wifiSTAInit();
+  // Initialise NTP CLient
   ntpInit();
 
 }
@@ -379,7 +423,7 @@ void loop() {
   while ( !digitalRead(0) ) {
     reset_cnt++;
     if ( reset_cnt >= 100 ) {
-        wifiCredEEPROMErase();
+        EEPROMErase();
     }
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }

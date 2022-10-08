@@ -29,11 +29,12 @@ app = Flask(__name__,template_folder=index_html_dir)
 sock = Sock(app)
 
 STATE={}
-STATE['tz']   = 'London (GMT)'
-STATE['time'] = None
-STATE['ssid'] = 'helloworldAP'
-STATE['conn'] = 'Connected'
-STATE['ip']   = None
+STATE['tz'] = 'Europe/London'
+STATE['tz_enc']  = None
+STATE['time']    = None
+STATE['ssid']    = 'helloworldAP'
+STATE['conn']    = 'Connected'
+STATE['ip']      = None
 
 def updateState():
     STATE['time'] = datetime.now().strftime("%H:%M:%S")
@@ -58,6 +59,7 @@ def ws(ws):
             elif req.get('type',None) == 'update':
                 if req['payld'].get('type',None) == 'tz':
                     STATE['tz'] = req['payld']['values'][0]
+                    STATE['tz_enc'] = req['payld']['values'][1]
                 elif req['payld'].get('type',None) == 'wifi':
                     STATE['ssid'] = req['payld']['values'][0]
                     STATE['passkey'] = req['payld']['values'][1]

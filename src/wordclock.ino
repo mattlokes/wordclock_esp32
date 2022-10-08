@@ -5,6 +5,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
+#include <time.h>
 
 // Index HTML Minified and converted into a index_html const string.
 #include "index.h"
@@ -45,10 +46,12 @@ String wl_status_to_string(wl_status_t status) {
 }
 
 typedef struct WordClockState {
-  String ssid;
-  String key; 
+  String      ssid;
+  String      key; 
   wl_status_t conn;
-  IPAddress ip;
+  IPAddress   ip;
+  struct tm   time;
+  bool        time_vld;
 };
 
 WordClockState state;
@@ -96,6 +99,35 @@ void wifiCredEEPROMErase() {
     ESP.restart();
 }
 
+//////////////////////////////////////////////
+// NTP
+//////////////////////////////////////////////
+
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 0;
+const int   daylightOffset_sec = 3600;
+
+void ntpInit( ) {
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+}
+
+void ntpUpdate() {
+ if(!getLocalTime(&state.time)){
+   state.time_vld = false;
+ }
+ state.time_vld = true;
+}
+
+String ntpTimeStr() {
+ char timeStringBuff[50];
+ if(!state.time_vld){
+   return "??";
+ }
+ //strftime(timeStringBuff, sizeof(timeStringBuff), "%A, %B %d %Y %H:%M:%S", &state.time);
+ strftime(timeStringBuff, sizeof(timeStringBuff), "%H:%M:%S", &state.time);
+ String asString(timeStringBuff);
+ return timeStringBuff;
+}
 
 //////////////////////////////////////////////
 // Wifi AP
@@ -175,10 +207,11 @@ void wsStatusUpdate(void * parameter) {
   for(;;){ // infinite loop
     char tx_msg_str[1024];
     state.conn = WiFi.status();
-    Serial.print("STA - State: ");
-    Serial.print(state.conn);
-    Serial.print(" - ");
-    Serial.println(wl_status_to_string(state.conn));
+    ntpUpdate();
+    //Serial.print("STA - State: ");
+    //Serial.print(state.conn);
+    //Serial.print(" - ");
+    //Serial.println(wl_status_to_string(state.conn));
     if( ws_client_cnt > 0) {
       state.ip = WiFi.localIP();
       if( xSemaphoreTake( tx_msg_sema, portMAX_DELAY ) == pdTRUE ) {
@@ -187,7 +220,7 @@ void wsStatusUpdate(void * parameter) {
         //tx_msg_str[0] = '\0';
         tx_msg["type"] = "stat";
         tx_msg["payld"]["tz"]   = "??";
-        tx_msg["payld"]["time"] = "??";
+        tx_msg["payld"]["time"] = ntpTimeStr();
         tx_msg["payld"]["ssid"] = state.ssid.c_str();
         tx_msg["payld"]["conn"] = wl_status_to_string(state.conn);
         tx_msg["payld"]["ip"]   = state.ip.toString();
@@ -334,6 +367,7 @@ void setup() {
   // Try to connect to STA
   wifiCredEEPROMLoad();
   wifiSTAInit();
+  ntpInit();
 
 }
 

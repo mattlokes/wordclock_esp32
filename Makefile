@@ -1,12 +1,12 @@
 TMP=./tmp
 MINIFY=$(TMP)/minify-html
-PYTHON_DEPS=flask-sock
+PYTHON_DEPS=flask-sock zeroconf
 
 SERIAL_PORT=/dev/cu.usbserial-0001
 BAUD=115200
 
-include arduino-cli.mk
 include python.mk
+include arduino-cli.mk
 
 $(MINIFY):
 	mkdir -p $(@D)
@@ -69,6 +69,16 @@ upload: $(TMP)/bin/wordclock.ino.bin
                               -b esp32:esp32:esp32 \
 	                      --input-dir $(<D) \
                               -p $(SERIAL_PORT)
+
+# Only supports one ESP32 with OTA on the network, TODO add support for more.
+.PHONY: upload-ota
+upload-ota: $(PYTHON) $(PIP) $(TMP)/bin/wordclock.ino.bin
+	rm -rf $(TMP)/.esp32-ota-disc
+	$(PYTHON) scripts/esp32-ota-discovery.py | tee $(TMP)/.esp32-ota-disc
+	$(ARDUINO_ESP32_OTA) \
+		-i `cat $(TMP)/.esp32-ota-disc | awk '{ print $$2 }'` \
+		-p `cat $(TMP)/.esp32-ota-disc | awk '{ print $$3 }'`\
+		-f $(TMP)/bin/wordclock.ino.bin
 
 .PHONY: monitor
 monitor:

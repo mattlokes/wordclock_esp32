@@ -1,5 +1,3 @@
-//#include <Arduino.h>
-//#include <Adafruit_NeoPixel.h>
    #include "wordclockDisplay.h"
 
    // Constructor: at minimum pass in the size of the display 
@@ -9,14 +7,13 @@
    // 
    wordclockDisplay::wordclockDisplay(uint16_t xSize, uint16_t ySize, uint16_t pin): 
 	   hyperdisplay(xSize, ySize),
-	   strip(xSize*ySize, pin, NEO_GRB + NEO_KHZ800)
+	   strip(xSize*ySize, pin)
    {
      buffer(); // Always enable buffer mode.
    }		   
 
    void wordclockDisplay::begin(uint16_t brightness) {
-     strip.begin();
-     strip.setBrightness(20);
+     strip.Begin();
    }
 
    // getoffsetColor: allows hyperdisplay to use your custom color type
@@ -27,7 +24,7 @@
    //      
    color_t wordclockDisplay::getOffsetColor(color_t base, uint32_t numPixels){
       color_t pret = NULL;
-      uint32_t * ptemp = (uint32_t *)base; // TODO: Make a custom type that saves a byte
+      RgbColor * ptemp = (RgbColor *)base;
       pret = (color_t)(ptemp + numPixels);
       return pret; 	
    }
@@ -54,24 +51,36 @@
      // Column offset
      sp += ( rev > 0 ) ?  (xExt-1) - x0 : x0;
 
-     strip.setPixelColor(sp, *(uint32_t*)data);
+     strip.SetPixelColor(sp, *(RgbColor*)data);
+     //Serial.print("hwpixel: ");
+     //Serial.print(x0);
+     //Serial.print(",");
+     //Serial.print(y0);
+     //Serial.print(" -> ");
+     //Serial.print(sp);
+     //Serial.print(" = ");
+     //Serial.println(*(uint32_t*)data, HEX);
+     
    }
 
    void    wordclockDisplay::swpixel( hd_extent_t x0, hd_extent_t y0, color_t data,
 		                      hd_colors_t colorCycleLength, 
 				      hd_colors_t startColorOffset ) {
-     uint32_t * buff;
+     RgbColor * buff;
      uint16_t sp;
 
      sp = (y0 * xExt) + x0;
-     buff = (uint32_t *)(pCurrentWindow->data);
-     buff[sp] = *(uint32_t*)data; 
+     buff = (RgbColor *)(pCurrentWindow->data);
+     buff[sp] = *(RgbColor*)data; 
    }
    
    // Outputs the current window's buffered data to the display
    void    wordclockDisplay::show(wind_info_t * wind){
+      Serial.println("matt 0");
       hyperdisplay::show(wind);
-      strip.show();
+      Serial.println("matt 1");
+      strip.Show();
+      Serial.println("matt 2");
    }
 
    // Override to Disable, Neopixel Library has built in buffer.
@@ -79,13 +88,8 @@
       return;
    }
 
-   // Propagate Neopixel Color function
-   uint32_t wordclockDisplay::color(uint8_t r, uint8_t g, uint8_t b) {
-      return strip.Color(r,g,b) ;
-   } 
-
    void wordclockDisplay::clear() {
-      uint32_t empty =  color(0,0,0);
+      RgbColor empty(0,0,0);
       fillWindow( &empty );
    }
 

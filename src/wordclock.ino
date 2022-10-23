@@ -73,7 +73,7 @@ const int pixel_w    = 16;
 const int pixel_h    = 14;
 
 wordclockDisplay pixels(pixel_w, pixel_h, pixel_pin);
-uint32_t         pixels_buff [pixel_w*pixel_h];
+RgbColor         pixels_buff [pixel_w*pixel_h];
 wind_info_t      pixels_buff_win;
 
 void pixelsInit() {
@@ -82,16 +82,16 @@ void pixelsInit() {
   pixels_buff_win.xMax = pixel_w-1;
   pixels_buff_win.yMin = 0;
   pixels_buff_win.yMax = pixel_h-1;
-  //pixels_buff_win.bufferMode = true;
+  pixels_buff_win.bufferMode = true;
 
   // Setup Pixel Buffer Memory
   pixels.setWindowMemory(&pixels_buff_win, (color_t)pixels_buff, pixel_w*pixel_h);
   pixels.pCurrentWindow = &pixels_buff_win;
+  pixels.clear();
+
+  pixels.begin();
 
   // Clear Pixel Buffer Memory
-  pixels.clear();
-  
-  pixels.begin();
   pixels.show();
 }
 
@@ -471,8 +471,8 @@ void setup() {
   // Initialise NTP CLient
   ntpInit();
 
-  uint32_t color = pixels.color(0,150,0);
-  pixels.clear();
+  RgbColor color(0,150,0);
+  //pixels.clear();
   pixels.pixel(0,0, &color );
   pixels.pixel(15,0, &color );
   pixels.pixel(0,13, &color );
@@ -483,9 +483,10 @@ void setup() {
 
 int reset_cnt;
 void loop() {
+  // OTA: Handle OTA request.
   ArduinoOTA.handle();
 
-  // If BOOT button held for 10seconds reset NVME
+  // NVME Clear: If BOOT button held for 10seconds reset NVME
   reset_cnt = 0;
   while ( !digitalRead(0) ) {
     reset_cnt++;
@@ -495,6 +496,8 @@ void loop() {
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 
+  // DNSServer: Captive Portal Requst Handle
   dnsServer.processNextRequest();  
+  // Websocket: Cleanup zombie sockets.
   ws.cleanupClients();
 }

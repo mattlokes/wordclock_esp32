@@ -43,6 +43,10 @@ $(TMP)/Neopixel.zip: URL_ZIP=https://github.com/adafruit/Adafruit_NeoPixel/archi
 $(TMP)/Neopixel.zip:
 	curl -LJ $(URL_ZIP) -o $(@)
 
+$(TMP)/NeoPixelBus.zip: URL_ZIP=https://github.com/Makuna/NeoPixelBus/archive/refs/tags/2.7.0.zip
+$(TMP)/NeoPixelBus.zip:
+	curl -LJ $(URL_ZIP) -o $(@)
+
 $(TMP)/Hyperdisplay.zip: URL_ZIP=https://github.com/sparkfun/SparkFun_HyperDisplay/archive/refs/tags/v2.0.1.zip
 $(TMP)/Hyperdisplay.zip:
 	curl -LJ $(URL_ZIP) -o $(@)
@@ -50,7 +54,7 @@ $(TMP)/Hyperdisplay.zip:
 LIB_ZIPS=$(TMP)/AsyncTCP.zip \
          $(TMP)/ESPAsyncWebServer.zip \
          $(TMP)/ArduinoJSON.zip \
-         $(TMP)/Neopixel.zip \
+         $(TMP)/NeoPixelBus.zip \
          $(TMP)/Hyperdisplay.zip
 
 SRC = src/wordclock.ino \

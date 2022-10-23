@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <Adafruit_NeoPixel.h>
+#include <NeoPixelBus.h>
 
 #ifndef WORDCLOCK_DISPLAY_CLASS_H
 #define WORDCLOCK_DISPLAY_CLASS_H
@@ -16,7 +16,7 @@ class wordclockDisplay : virtual public hyperdisplay{
 private:
 protected:
 
-   Adafruit_NeoPixel strip;
+   NeoPixelBus<NeoGrbFeature,NeoEsp32I2s1800KbpsMethod> strip;
 
 public:
    // Constructor: at minimum pass in the size of the display 
@@ -57,9 +57,6 @@ public:
 
    // Override to Disable, Neopixel Library has built in buffer.
    void    direct(wind_info_t * wind = NULL);
-
-   // Propagate Neopixel Color function
-   uint32_t color(uint8_t r, uint8_t g, uint8_t b);
 
    void clear();
 

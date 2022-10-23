@@ -8,6 +8,8 @@
 #include <EEPROM.h>
 #include <time.h>
 
+#include "wordclockDisplay.h"
+
 // Index HTML Minified and converted into a index_html const string.
 #include "index.h"
 
@@ -62,6 +64,36 @@ typedef struct WordClockState {
 };
 
 WordClockState state;
+
+//////////////////////////////////////////////
+// Pixels (Display)
+//////////////////////////////////////////////
+const int pixel_pin  = 13; // GPIO13
+const int pixel_w    = 16;
+const int pixel_h    = 14;
+
+wordclockDisplay pixels(pixel_w, pixel_h, pixel_pin);
+uint32_t         pixels_buff [pixel_w*pixel_h];
+wind_info_t      pixels_buff_win;
+
+void pixelsInit() {
+  // Setup Pixel Buffer Window Dimensions (full)
+  pixels_buff_win.xMin = 0;
+  pixels_buff_win.xMax = pixel_w-1;
+  pixels_buff_win.yMin = 0;
+  pixels_buff_win.yMax = pixel_h-1;
+  //pixels_buff_win.bufferMode = true;
+
+  // Setup Pixel Buffer Memory
+  pixels.setWindowMemory(&pixels_buff_win, (color_t)pixels_buff, pixel_w*pixel_h);
+  pixels.pCurrentWindow = &pixels_buff_win;
+
+  // Clear Pixel Buffer Memory
+  pixels.clear();
+  
+  pixels.begin();
+  pixels.show();
+}
 
 //////////////////////////////////////////////
 // NTP
@@ -155,7 +187,12 @@ void wifiAPInit() {
   WiFi.mode(WIFI_MODE_APSTA);
   WiFi.softAP(ap_ssid, ap_password);
 
-  Serial.print("AP Started with IP: ");
+  Serial.print("AP - SSID   : ");
+  Serial.println(ap_ssid);
+  Serial.print("AP - KEY    : ");
+  Serial.println(ap_password);
+  Serial.println("AP - STATUS : ENABLED ");
+  Serial.print("AP - IP     : ");
   Serial.println(WiFi.softAPIP());
 
 }
@@ -370,6 +407,10 @@ void wsInit() {
       xSemaphoreGive( tx_msg_sema );
 }
 
+/////////////////////////////////////////////
+// OTA Updates
+/////////////////////////////////////////////
+
 void otaInit() {
   ArduinoOTA
     .onStart([]() {
@@ -390,6 +431,8 @@ void otaInit() {
       else if (error == OTA_END_ERROR) Serial.println("End Failed");
     });
 
+  ArduinoOTA.setHostname(ap_ssid);
+
   ArduinoOTA.begin();
 }
 
@@ -406,6 +449,7 @@ void setup() {
   wsInit();
   serverInit(); 
   otaInit();
+  pixelsInit();
   
   // Initialise DNS Server for captive portal.
   dnsServer.start(53, "*", WiFi.softAPIP());
@@ -427,6 +471,14 @@ void setup() {
   // Initialise NTP CLient
   ntpInit();
 
+  uint32_t color = pixels.color(0,150,0);
+  pixels.clear();
+  pixels.pixel(0,0, &color );
+  pixels.pixel(15,0, &color );
+  pixels.pixel(0,13, &color );
+  pixels.pixel(15,13, &color );
+  pixels.show();
+
 }
 
 int reset_cnt;
@@ -442,7 +494,7 @@ void loop() {
     }
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
- 
+
   dnsServer.processNextRequest();  
   ws.cleanupClients();
 }

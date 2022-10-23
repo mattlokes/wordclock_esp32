@@ -39,12 +39,23 @@ $(TMP)/ArduinoJSON.zip: URL_ZIP=https://github.com/bblanchon/ArduinoJson/archive
 $(TMP)/ArduinoJSON.zip:
 	curl -LJ $(URL_ZIP) -o $(@)
 
+$(TMP)/Neopixel.zip: URL_ZIP=https://github.com/adafruit/Adafruit_NeoPixel/archive/refs/tags/v1.1.2.zip
+$(TMP)/Neopixel.zip:
+	curl -LJ $(URL_ZIP) -o $(@)
+
+$(TMP)/Hyperdisplay.zip: URL_ZIP=https://github.com/sparkfun/SparkFun_HyperDisplay/archive/refs/tags/v2.0.1.zip
+$(TMP)/Hyperdisplay.zip:
+	curl -LJ $(URL_ZIP) -o $(@)
 
 LIB_ZIPS=$(TMP)/AsyncTCP.zip \
          $(TMP)/ESPAsyncWebServer.zip \
-         $(TMP)/ArduinoJSON.zip
+         $(TMP)/ArduinoJSON.zip \
+         $(TMP)/Neopixel.zip \
+         $(TMP)/Hyperdisplay.zip
 
 SRC = src/wordclock.ino \
+      src/wordclockDisplay.h \
+      src/wordclockDisplay.cpp \
       $(TMP)/index.h
 
 # Create tmp wordclock directory and copy all source to it

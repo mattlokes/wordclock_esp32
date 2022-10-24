@@ -60,6 +60,8 @@ LIB_ZIPS=$(TMP)/AsyncTCP.zip \
 SRC = src/wordclock.ino \
       src/wordclockDisplay.h \
       src/wordclockDisplay.cpp \
+      src/wordclockAppClock.h \
+      src/wordclockAppClock.cpp \
       $(TMP)/index.h
 
 # Create tmp wordclock directory and copy all source to it

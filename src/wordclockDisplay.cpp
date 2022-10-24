@@ -76,11 +76,8 @@
    
    // Outputs the current window's buffered data to the display
    void    wordclockDisplay::show(wind_info_t * wind){
-      Serial.println("matt 0");
       hyperdisplay::show(wind);
-      Serial.println("matt 1");
       strip.Show();
-      Serial.println("matt 2");
    }
 
    // Override to Disable, Neopixel Library has built in buffer.

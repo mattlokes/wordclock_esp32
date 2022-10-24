@@ -9,13 +9,14 @@
 #include <time.h>
 
 #include "wordclockDisplay.h"
+#include "wordclockAppClock.h"
 
 // Index HTML Minified and converted into a index_html const string.
 #include "index.h"
 
-// Replace with your network credentials
-const char* ap_ssid = "Wordclock";
+// AP SSID Cred
 const char* ap_password = "helloworld";
+char        ap_ssid [19];
 
 // Create DNS Server for captive portal
 DNSServer dnsServer;
@@ -439,6 +440,14 @@ void otaInit() {
 void setup() {
   pinMode(0, INPUT); // Use BOOT Button for NVME reset, 0=Pressed, 1=Not
   Serial.begin(115200);
+
+  // Attach Mac Address to SSID base name
+  uint32_t mac;
+  mac =  ((uint32_t)WiFi.macAddress()[3]) << 24;
+  mac |= ((uint32_t)WiFi.macAddress()[2]) << 16;
+  mac |= ((uint32_t)WiFi.macAddress()[1]) << 8;
+  mac |= ((uint32_t)WiFi.macAddress()[0]);
+  sprintf(ap_ssid, "Wordclock_%x", mac); 
 
   // Initialize EEPROM and fetch values
   EEPROMInit();

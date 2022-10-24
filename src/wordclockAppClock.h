@@ -1,4 +1,10 @@
 #include <Arduino.h>
+#include <time.h>
+
+#include "wordclockDisplay.h"
+
+#ifndef WORDCLOCK_APP_CLOCK_H
+#define WORDCLOCK_APP_CLOCK_H
 
 typedef struct {
    const uint16_t x;
@@ -11,6 +17,7 @@ typedef struct {
    const draw_cmd_line_t * cmds;
 } draw_cmds_t;
 
+enum wordclockAppClock_pre_time_enum { the_time_is=1, it_is=2 }; 
 const draw_cmds_t wordclockAppClock_pre_time[] = {
                      // 0 - None
                      { .num = 0, .cmds = NULL },
@@ -171,6 +178,7 @@ const draw_cmds_t wordclockAppClock_minutes[] = {
                      { .num = 1, .cmds=(draw_cmd_line_t[]){ { .x=1,  .y=7,  .len=4 } }}
                   };
 
+enum wordclockAppClock_words_enum { minute=1, s=2, past=3, to=4 }; 
 const draw_cmds_t wordclockAppClock_words[] = {
                      // 0 - None
                      { .num = 0, .cmds = NULL },
@@ -213,6 +221,7 @@ const draw_cmds_t wordclockAppClock_hours[] = {
                      { .num = 1, .cmds=(draw_cmd_line_t[]){ { .x=7,  .y=11, .len=6 } }}
                   };
 
+enum wordclockAppClock_tod_enum { morning=1, afternoon=2, evening=3, night=4, noon=5 }; 
 const draw_cmds_t wordclockAppClock_tod[] = {
                      // 0 - None
                      { .num = 0, .cmds = NULL },
@@ -250,3 +259,13 @@ const draw_cmds_t wordclockAppClock_tod[] = {
 		     // 5 - NOON
                      { .num = 1, .cmds=(draw_cmd_line_t[]){ { .x=5,  .y=13, .len=4 } }}
                   };
+
+void wordclockAppClockDrawCmds( const draw_cmds_t * cmds, 
+                                color_t color,
+				wordclockDisplay * disp);
+
+void wordclockAppClockDrawTime( struct tm* time, 
+                                color_t color,
+		                wordclockDisplay * disp);
+
+#endif /* WORDCLOCK_APP_CLOCK_H */

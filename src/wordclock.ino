@@ -437,6 +437,7 @@ void otaInit() {
   ArduinoOTA.begin();
 }
 
+
 void setup() {
   pinMode(0, INPUT); // Use BOOT Button for NVME reset, 0=Pressed, 1=Not
   Serial.begin(115200);
@@ -480,13 +481,14 @@ void setup() {
   // Initialise NTP CLient
   ntpInit();
 
-  RgbColor color(0,150,0);
-  //pixels.clear();
-  pixels.pixel(0,0, &color );
-  pixels.pixel(15,0, &color );
-  pixels.pixel(0,13, &color );
-  pixels.pixel(15,13, &color );
-  pixels.show();
+  xTaskCreate(
+     wordclockAppClockTest,   // Function that should be called
+     "wordclockAppClockTest", // Name of the task (for debugging)
+     4096,                    // Stack size (bytes)
+     &pixels,                 // Parameter to pass (Display Object ptr)
+     1,                       // Task priority
+     NULL                     // Task handle
+  );
 
 }
 

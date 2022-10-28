@@ -4,18 +4,11 @@ void wordclockAppClockDrawCmds( const draw_cmds_t * cmds,
                                 color_t color,
 				wordclockDisplay * disp) {
    for( int i=0; i< cmds->num; i++ ) {
-      disp->xline( cmds->cmds[i].x, cmds->cmds[i].y, cmds->cmds[i].len, color);
+      if (cmds->cmds[i].len > 0) {
+         disp->xline( cmds->cmds[i].x, cmds->cmds[i].y, cmds->cmds[i].len-1, color);
+      }
    }
 }
-
-//enum wordclockAppClock_pre_time_enum { none, the_time_is, it_is } 
-//enum wordclockAppClock_words_enum { none, minute, s, past, to } 
-//enum wordclockAppClock_tod_enum { none, morning, afternoon, evening, night,noon }
-//const draw_cmds_t wordclockAppClock_pre_time[]
-//const draw_cmds_t wordclockAppClock_minutes[]
-//const draw_cmds_t wordclockAppClock_words[]
-//const draw_cmds_t wordclockAppClock_hours[]
-//const draw_cmds_t wordclockAppClock_tod[]
 
 void wordclockAppClockDrawTime( struct tm* time, 
                                 color_t color,
@@ -85,4 +78,42 @@ void wordclockAppClockDrawTime( struct tm* time,
 		        disp);
      }
    }
+}
+
+void _wordclockAppClockTest(wordclockDisplay * disp) {
+   struct tm fake_time;
+   RgbColor color(0,150,0);
+
+   // Iterate through hours
+   for (fake_time.tm_hour=0; fake_time.tm_hour < 24; ++fake_time.tm_hour ) {
+      disp->clear();
+      wordclockAppClockDrawTime( &fake_time,
+                                 &color,
+                                 disp );
+      disp->show();
+
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+   }
+   fake_time.tm_hour=0;
+
+   // Iterate through mins
+   for (fake_time.tm_min=0; fake_time.tm_min < 60; ++fake_time.tm_min ) {
+      disp->clear();
+      wordclockAppClockDrawTime( &fake_time,
+                                 &color,
+                                 disp );
+      disp->show();
+
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+   }
+   fake_time.tm_min=0;
+
+   disp->clear();
+
+}
+
+void wordclockAppClockTest(void * parameter) {
+  for(;;){
+    _wordclockAppClockTest( (wordclockDisplay*)parameter );
+  }
 }

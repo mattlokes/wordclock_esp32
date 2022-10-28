@@ -50,7 +50,7 @@ const draw_cmds_t wordclockAppClock_minutes[] = {
                      // 4 -
                      { .num = 1, .cmds=(draw_cmd_line_t[]){ { .x=6,  .y=2,  .len=4 } }},
                      // 5 -
-                     { .num = 1, .cmds=(draw_cmd_line_t[]){ { .x=11, .y=1,  .len=4 } }},
+                     { .num = 1, .cmds=(draw_cmd_line_t[]){ { .x=11, .y=2,  .len=4 } }},
                      // 6 -
                      { .num = 1, .cmds=(draw_cmd_line_t[]){ { .x=8,  .y=3,  .len=3 } }},
                      // 7 -
@@ -135,14 +135,14 @@ const draw_cmds_t wordclockAppClock_minutes[] = {
                      //24 -
                      { .num = 2,
                        .cmds=(draw_cmd_line_t[]){
-                          { .x=7,  .y=2,  .len=4 },
+                          { .x=6,  .y=2,  .len=4 },
                           { .x=0,  .y=1,  .len=6 }
                        }
                      },
                      //25 -
                      { .num = 2,
                        .cmds=(draw_cmd_line_t[]){
-                          { .x=11, .y=1,  .len=4 },
+                          { .x=11, .y=2,  .len=4 },
                           { .x=0,  .y=1,  .len=6 }
                        }
                      },
@@ -267,5 +267,6 @@ void wordclockAppClockDrawCmds( const draw_cmds_t * cmds,
 void wordclockAppClockDrawTime( struct tm* time, 
                                 color_t color,
 		                wordclockDisplay * disp);
+void wordclockAppClockTest( void * parameter );
 
 #endif /* WORDCLOCK_APP_CLOCK_H */

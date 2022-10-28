@@ -6,6 +6,7 @@
 #include <ArduinoOTA.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
+#include <sntp.h>
 #include <time.h>
 
 #include "wordclockDisplay.h"
@@ -109,21 +110,24 @@ void ntpInit( ) {
 }
 
 void ntpUpdate() {
- if(!getLocalTime(&state.time)){
+ if (!getLocalTime(&state.time)) {
    state.time_vld = false;
  }
- state.time_vld = true;
+ if (SNTP_SYNC_STATUS_COMPLETED == sntp_get_sync_status() ) {
+   state.time_vld = true;
+   Serial.println("NTP - SYNC  : True");
+ }
 }
 
 String ntpTimeStr() {
- char timeStringBuff[50];
- if(!state.time_vld){
-   return "??";
- }
- //strftime(timeStringBuff, sizeof(timeStringBuff), "%A, %B %d %Y %H:%M:%S", &state.time);
- strftime(timeStringBuff, sizeof(timeStringBuff), "%H:%M:%S", &state.time);
- String asString(timeStringBuff);
- return timeStringBuff;
+   char timeStringBuff[50];
+   if(!state.time_vld){
+     return "??";
+   }
+   //"%A, %B %d %Y %H:%M:%S"
+   strftime(timeStringBuff, sizeof(timeStringBuff), "%H:%M:%S", &state.time);
+   String asString(timeStringBuff);
+   return timeStringBuff;
 }
 
 
@@ -437,18 +441,40 @@ void otaInit() {
   ArduinoOTA.begin();
 }
 
+/////////////////////////////////////////////
+// AppClock Updates
+/////////////////////////////////////////////
+
+void wordclockAppClockUpdater(void * parameter) {
+  RgbColor clock_color(0x51,0x00,0xFF);
+
+  struct tm last_time;
+  memset(&last_time, 0, sizeof(last_time));
+
+  for(;;){
+      if (state.time_vld) { 
+         if ( (last_time.tm_min  != state.time.tm_min ) ||
+              (last_time.tm_hour != state.time.tm_hour) ) {
+
+            pixels.clear();
+            wordclockAppClockDrawTime( &state.time,
+                                       &clock_color,
+                                       &pixels );
+            pixels.show();
+            memcpy(&last_time, &state.time, sizeof(last_time));
+         }
+      }
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
 
 void setup() {
   pinMode(0, INPUT); // Use BOOT Button for NVME reset, 0=Pressed, 1=Not
   Serial.begin(115200);
 
-  // Attach Mac Address to SSID base name
-  uint32_t mac;
-  mac =  ((uint32_t)WiFi.macAddress()[3]) << 24;
-  mac |= ((uint32_t)WiFi.macAddress()[2]) << 16;
-  mac |= ((uint32_t)WiFi.macAddress()[1]) << 8;
-  mac |= ((uint32_t)WiFi.macAddress()[0]);
-  sprintf(ap_ssid, "Wordclock_%x", mac); 
+  uint32_t id = (uint32_t)ESP.getEfuseMac();
+  sprintf(ap_ssid, "Wordclock_%x", id); 
 
   // Initialize EEPROM and fetch values
   EEPROMInit();
@@ -482,12 +508,12 @@ void setup() {
   ntpInit();
 
   xTaskCreate(
-     wordclockAppClockTest,   // Function that should be called
-     "wordclockAppClockTest", // Name of the task (for debugging)
-     4096,                    // Stack size (bytes)
-     &pixels,                 // Parameter to pass (Display Object ptr)
-     1,                       // Task priority
-     NULL                     // Task handle
+     wordclockAppClockUpdater,   // Function that should be called
+     "wordclockAppClockUpdater",  // Name of the task (for debugging)
+     4096,                       // Stack size (bytes)
+     &pixels,                    // Parameter to pass (Display Object ptr)
+     1,                          // Task priority
+     NULL                        // Task handle
   );
 
 }
